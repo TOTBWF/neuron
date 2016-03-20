@@ -27,7 +27,7 @@ Network = () ->
     # The d attribute specifies a path for an SVG Line
     # M Specifies an origin for the line
     # L actually draws the line
-    "M" + x0 + "," + y0 + "L" + x1 + "," + y1
+    "M " + x0 + " " + y0 + " L " + x1 + " " + y1
 
   # Drag behaviour
   nodeDrag = d3.behavior.drag()
@@ -49,9 +49,36 @@ Network = () ->
     neuronSvg = neuronContainer.append("svg")
     .attr("width", "100%")
     .attr("height", "100%")
+    svgDefs = neuronSvg.append("svg:defs")
+    # This makes a triangle, don't question it
+    # We hide the viewbox off screen in order to load the SVG without showing it
+    svgDefs.append("svg:marker")
+      .attr("id", "drag-arrow")
+      .attr("viewBox", "-5 -5 10 10")
+      .attr("refX", "0")
+      .attr("refY", "0")
+      .attr("markerWidth", "5")
+      .attr("markerHeight", "5")
+      .attr("markerUnits", "strokeWidth")
+      .attr("orient", "auto")
+      .append("svg:path")
+      .attr("d", "M0 0 m -5 -5 L 5 0 L -5 5 Z")
+    svgDefs.append("svg:marker")
+      .attr("id", "edge-arrow")
+      .attr("viewBox", "-5 -5 10 10")
+      .attr("refX", "17")
+      .attr("refY", "0")
+      .attr("markerWidth", "5")
+      .attr("markerHeight", "5")
+      .attr("markerUnits", "strokeWidth")
+      .attr("orient", "auto")
+      .append("svg:path")
+      .attr("d", "M0 0 m -5 -5 L 5 0 L -5 5 Z")
     shiftDragLine = neuronSvg.append("svg:path")
+      .style("marker-end", "url(#drag-arrow)")
       .attr("class", "link")
       .attr("d", generatePath(0,0,0,0))
+    shiftDragLine.classed("hidden", true)
     edgesG = neuronSvg.append("g").attr("id", "edges")
     nodesG = neuronSvg.append("g").attr("id", "nodes")
     neuronSvg.on('dblclick', svgDoubleClick)
@@ -147,8 +174,11 @@ Network = () ->
 
   updateEdges = () ->
     edgeSelection = edgesG.selectAll("path").data(myEdges, (d) -> d.start.id + "+" + d.finish.id)
-    edgeSelection.enter().append("path").classed("link", true)
+    edgeSelection.enter().append("path")
+      .style("marker-end", "url(#edge-arrow)")
+      .classed("link", true)
     edgeSelection.attr("d", (d) -> generatePath(d.start.x, d.start.y, d.finish.x, d.finish.y))
+    edgeSelection.exit().remove()
 
   # Re-render the graph
   update = () ->

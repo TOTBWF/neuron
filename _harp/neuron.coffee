@@ -90,7 +90,7 @@ Network = () ->
   svgDoubleClick = () ->
     return if d3.event.defaultPrevented
     coords = d3.mouse(neuronSvg.node())
-    node = {id: currentID++, x:coords[0], y:coords[1]};
+    node = {id: currentID++, x:coords[0], y:coords[1], edges:[]};
     myNodes.push(node)
     update()
 
@@ -127,8 +127,13 @@ Network = () ->
         return elem.start == edge.start && elem.finish == edge.finish
       )
       if filteredEdges .length == 0
+        # Make sure that the graph doesn't contain cycles
+        mouseDownNode.edges.push(edge)
         myEdges.push(edge)
-        console.log(JSON.stringify(myEdges))
+        if isCyclic()
+          mouseDownNode.edges.pop()
+          myEdges.pop()
+          alert("Neural Networks Can't Be Cyclic!")
         update()
     shiftDragLine.classed("hidden", true)
 
@@ -144,8 +149,6 @@ Network = () ->
         index += 1
     update()
 
-
-
   updateNodes = () ->
     nodeSelection = nodesG.selectAll("g").data(myNodes, (d) -> d.id)
     enterNodeSelection = nodeSelection.enter().append("g")
@@ -157,7 +160,7 @@ Network = () ->
     enterNodeSelection.append("text")
     # Update the selection
     nodeSelection.select("text")
-    #.text((d) -> d.id)
+    .text((d) -> d.id)
       .attr("x", (d) -> d.x + "px")
       .attr("y", (d) -> d.y + "px")
       .attr("fill", "black")
@@ -184,6 +187,34 @@ Network = () ->
   update = () ->
     updateNodes()
     updateEdges()
+
+  isCyclic = () ->
+    # Init visited and recursive stack arrays
+    visited = []
+    recStack = []
+    for i in [0..myNodes.length - 1]
+      do (i) ->
+        visited[i] = false
+        recStack[i] = false
+
+    # Recursive helper function
+    helper = (i) ->
+      if visited[i] == false
+        visited[i] = true
+        recStack[i] = true
+        for edge in myNodes[i].edges
+          j = myNodes.indexOf(edge.finish)
+          if !visited[j] && helper(j)
+            return true
+          else if recStack[j]
+            return true
+      recStack[i] = false
+      return false
+
+    for i in [0..myNodes.length - 1]
+      return true if helper(i)
+    return false
+
   return network
 
 $ ->

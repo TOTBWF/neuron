@@ -2,11 +2,13 @@ Network = () ->
   # Store list of node and edge data
   myNodes = []
   myEdges = []
+  selectedNodeData = {}
 
   state = {
     mouseDownNode: null,
-    shiftDrag: false
+    shiftDrag: false,
   }
+  selectedNode = null
 
   # Keep track of the ID
   currentID = 0;
@@ -18,6 +20,9 @@ Network = () ->
   # Container Elements
   neuronContainer = null;
   neuronSvg = null;
+  neuronPanelWeights = null;
+  neuronPanelBias = null;
+  neuronPanelBiasInput = null;
 
   # Shift + Drag line
   shiftDragLine = null
@@ -46,9 +51,10 @@ Network = () ->
 
   network = (container, nodes, edges) ->
     neuronContainer = d3.select(container)
+    neuronPanelBias = d3.select("#neuron-panel-bias")
+    neuronPanelWeights = d3.select("#neuron-panel-weights")
     neuronSvg = neuronContainer.append("svg")
-    .attr("width", "100%")
-    .attr("height", "100%")
+    .attr("class", "neuron-svg")
     svgDefs = neuronSvg.append("svg:defs")
     # This makes a triangle, don't question it
     # We hide the viewbox off screen in order to load the SVG without showing it
@@ -84,17 +90,27 @@ Network = () ->
     neuronSvg.on('dblclick', svgDoubleClick)
     neuronSvg.on("mousedown", svgMouseDown)
     neuronSvg.on("mouseup", svgMouseUp)
+    # Setup Bias
+    neuronPanelBiasInput = neuronPanelBias.append("input")
+    .attr("type", "hidden")
+    .attr("id", "input_bias")
+    .attr("value", "1")
+    .on("input", () ->
+      selectedNode.bias = this.value
+      update()
+    )
     update()
 
   # Svg Mouse Handlers
   svgDoubleClick = () ->
     return if d3.event.defaultPrevented
     coords = d3.mouse(neuronSvg.node())
-    node = {id: currentID++, x:coords[0], y:coords[1], inputs:[], outputs:[]};
+    node = {id: currentID++, x:coords[0], y:coords[1], bias:0, inputWeights:[], inputs:[], outputs:[]};
     myNodes.push(node)
     update()
 
   svgMouseDown = () ->
+
 
   svgMouseUp = () ->
     if state.shiftDrag
@@ -130,13 +146,25 @@ Network = () ->
         # Make sure that the graph doesn't contain cycles
         mouseDownNode.outputs.push(edge)
         d.inputs.push(edge)
+        d.inputWeights.push(1)
         myEdges.push(edge)
         if isCyclic()
           mouseDownNode.outputs.pop()
           d.inputs.pop()
+          d.inputWeights.pop()
           myEdges.pop()
           alert("Neural Networks Can't Be Cyclic!")
         update()
+    else
+      # We have just clicked on a node
+      selectedNode = mouseDownNode
+      # Load all data to the side panel
+      selectedNodeData.inputWeights = mouseDownNode.inputWeights
+      selectedNodeData.bias = mouseDownNode.bias
+      neuronPanelBiasInput.attr("type", "text")
+      neuronPanelBiasInput.attr("value", selectedNodeData.bias)
+      updatePanel()
+
     shiftDragLine.classed("hidden", true)
 
   nodeRightClick = (d) ->
@@ -168,10 +196,11 @@ Network = () ->
     enterNodeSelection.append("text")
     # Update the selection
     nodeSelection.select("text")
-    .text((d) -> d.id)
+    .text((d) -> "Bias:" + d.bias)
       .attr("x", (d) -> d.x + "px")
       .attr("y", (d) -> d.y + "px")
-      .attr("fill", "black")
+      .attr("text-anchor", "middle")
+      .attr("fill", "#333")
     nodeSelection.select("circle")
       .attr("cx", (d) -> d.x + "px")
       .attr("cy", (d) -> d.y + "px")
@@ -182,12 +211,42 @@ Network = () ->
     nodeSelection.exit().remove()
 
   updateEdges = () ->
-    edgeSelection = edgesG.selectAll("path").data(myEdges, (d) -> d.start.id + "+" + d.finish.id)
-    edgeSelection.enter().append("path")
+    edgeSelection = edgesG.selectAll("g").data(myEdges, (d) -> d.start.id + "+" + d.finish.id)
+    enterEdgeSelection = edgeSelection.enter().append("g")
+    enterEdgeSelection.append("path")
       .style("marker-end", "url(#edge-arrow)")
       .classed("link", true)
-    edgeSelection.attr("d", (d) -> generatePath(d.start.x, d.start.y, d.finish.x, d.finish.y))
+    enterEdgeSelection.append("text").append("textPath")
+    .attr("xlink:href", (d,i) -> "#linkId_" + i)
+    edgeSelection.select("path")
+      .attr("id", (d,i) -> "linkId_" + i)
+      .attr("d", (d) -> generatePath(d.start.x, d.start.y, d.finish.x, d.finish.y))
+    edgeSelection.select("text")
+      .attr("text-anchor", "end")
+      .attr("dx", (d) ->
+        # Get the length of the path
+        distance = Math.sqrt(Math.pow(d.start.x - d.finish.x, 2) + Math.pow(d.start.y - d.finish.y, 2))
+        return distance - 100
+      )
+      .attr("dy", "-10")
+      .attr("fill", "#333")
+    edgeSelection.select("textPath")
+    .text((d) -> "W:" + d.finish.inputWeights[d.finish.inputs.indexOf(d)])
     edgeSelection.exit().remove()
+
+  updatePanel = () ->
+    # Setup Weights
+    weightSelection = neuronPanelWeights.selectAll("input").data(selectedNodeData.inputWeights)
+    weightSelection.enter().append("input")
+    .attr("type", "input")
+    .attr("value", (d) -> d)
+    .attr("id", (d,i) -> "input_weight_" + i)
+    .on("input", (d,i) ->
+      console.log(d)
+      selectedNode.inputWeights[i] = this.value
+      update()
+    )
+    weightSelection.exit().remove()
 
   # Re-render the graph
   update = () ->

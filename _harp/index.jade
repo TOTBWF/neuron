@@ -1,3 +1,14 @@
-#title-bar.no-margins
-    h1.title.no-margins Neuron
-.neuron-container#neuron
+.box
+    #title-bar.no-margins
+        h1.title.no-margins Neuron
+    .neuron-wrapper
+        .neuron-panel
+            h4.subtitle Configuration
+            p.center Double click to create a new neuron
+            p.center Shift + click to link two neurons
+            p.center Click and drag neurons to move them
+            h4.center Bias:
+            #neuron-panel-bias.center
+            h4.center Weights:
+            #neuron-panel-weights.center
+        .neuron-container#neuron

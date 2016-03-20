@@ -90,7 +90,7 @@ Network = () ->
   svgDoubleClick = () ->
     return if d3.event.defaultPrevented
     coords = d3.mouse(neuronSvg.node())
-    node = {id: currentID++, x:coords[0], y:coords[1], edges:[]};
+    node = {id: currentID++, x:coords[0], y:coords[1], inputs:[], outputs:[]};
     myNodes.push(node)
     update()
 
@@ -128,10 +128,12 @@ Network = () ->
       )
       if filteredEdges .length == 0
         # Make sure that the graph doesn't contain cycles
-        mouseDownNode.edges.push(edge)
+        mouseDownNode.outputs.push(edge)
+        d.inputs.push(edge)
         myEdges.push(edge)
         if isCyclic()
-          mouseDownNode.edges.pop()
+          mouseDownNode.outputs.pop()
+          d.inputs.pop()
           myEdges.pop()
           alert("Neural Networks Can't Be Cyclic!")
         update()
@@ -143,6 +145,12 @@ Network = () ->
     index = 0
     while index < myNodes.length
       if  myNodes[index].id == d.id
+        # Remove all associated edges via filter
+        myEdges = myEdges.filter((edge) ->
+          node = myNodes[index]
+          if node.outputs.indexOf(edge) < 0 && node.inputs.indexOf(edge) < 0
+            return true
+        )
         myNodes.splice(index, 1)
         break
       else
@@ -168,9 +176,7 @@ Network = () ->
       .attr("cx", (d) -> d.x + "px")
       .attr("cy", (d) -> d.y + "px")
       .attr("r", "40")
-      .attr("fill", "white")
-      .attr("stroke", "black")
-      .attr("stroke-width", "3")
+      .attr("class", "node")
     nodeSelection
       .attr("id", (d) -> d.id)
     nodeSelection.exit().remove()
@@ -202,7 +208,7 @@ Network = () ->
       if visited[i] == false
         visited[i] = true
         recStack[i] = true
-        for edge in myNodes[i].edges
+        for edge in myNodes[i].outputs
           j = myNodes.indexOf(edge.finish)
           if !visited[j] && helper(j)
             return true

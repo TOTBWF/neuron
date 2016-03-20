@@ -42,6 +42,7 @@ Network = () ->
         # Move both the circle and the text
         d3.select(this).select("circle").attr("cx", d.x).attr("cy", d.y)
         d3.select(this).select("text").attr("x", d.x).attr("y", d.y)
+        update()
 
   network = (container, nodes, edges) ->
     neuronContainer = d3.select(container)

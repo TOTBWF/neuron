@@ -267,10 +267,7 @@ Network = () ->
     # Update the selection
     nodeSelection.select("text")
       .text((d) ->
-        if nodeInputs.indexOf(d) != -1
-          "Input:" + d.bias
-        else
-          "Bias:" + d.bias
+        "ID: " + d.id
       )
       .attr("x", (d) -> d.x + "px")
       .attr("y", (d) -> d.y + "px")
@@ -316,7 +313,7 @@ Network = () ->
     edgeSelection.select("textPath")
     .text((edge) ->
       finishNode = indexNodesById(edge.finish_id)
-      "W:" + finishNode.inputWeights[finishNode.inputs.indexOf(edge)]
+      "" + finishNode.inputs.indexOf(edge)
     )
     edgeSelection
     .attr("id", (d) -> "edge_" + d.start_id + "-" + d.finish_id)
@@ -407,9 +404,11 @@ Network = () ->
       return computeSigmoid(inputs, node)
 
     # Start at the end and work our way backwards
+    outputString = ""
     for outputNode in nodeOutputs
-      console.log("node_" + outputNode.id + " = " + resolveNode(outputNode))
-      update()
+      outputString += "node_" + outputNode.id + " = " + resolveNode(outputNode) + "\n"
+    alert(outputString)
+    update()
 
   return network
 

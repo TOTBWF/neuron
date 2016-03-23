@@ -1,7 +1,28 @@
+class Node
+  # Static ID counter
+  @currentID:0
+  constructor: (@x, @y)->
+    @id = Node.currentID++
+    @bias=0
+    @inputWeights=[]
+    @inputs=[]
+    @outputs=[]
+
+  # Get the D3 selection associated with the node
+  getAssociatedElement: () ->
+    return d3.select("#node_" + @id)
+
+class Edge
+  constructor: (@start, @finish) ->
+
 Network = () ->
   # Store list of node and edge data
   myNodes = []
   myEdges = []
+
+  nodeInputs = []
+  nodeOutputs = []
+
   selectedNodeData = {}
 
   state = {
@@ -10,8 +31,6 @@ Network = () ->
   }
   selectedNode = null
 
-  # Keep track of the ID
-  currentID = 0;
 
   # Hold SVG Groups for edges and nodes
   nodesG = null
@@ -20,9 +39,17 @@ Network = () ->
   # Container Elements
   neuronContainer = null;
   neuronSvg = null;
+  
   neuronPanelWeights = null;
   neuronPanelBias = null;
   neuronPanelBiasInput = null;
+  
+  neuronPanelInputRow = null;
+  neuronPanelOutputRow = null;
+
+  neuronPanelInputSwitch = null;
+  neuronPanelOutputSwitch = null;
+
 
   # Shift + Drag line
   shiftDragLine = null
@@ -53,6 +80,12 @@ Network = () ->
     neuronContainer = d3.select(container)
     neuronPanelBias = d3.select("#neuron-panel-bias")
     neuronPanelWeights = d3.select("#neuron-panel-weights")
+    neuronPanelInputRow = d3.select("#input-switch-row").style("display", "none")
+    neuronPanelOutputRow = d3.select("#output-switch-row").style("display", "none")
+    neuronPanelInputSwitch = d3.select("#input_toggle")
+    neuronPanelOutputSwitch = d3.select("#output_toggle")
+    neuronPanelInputSwitch.on("change", toggleInputNode)
+    neuronPanelOutputSwitch.on("change", toggleOutputNode)
     neuronSvg = neuronContainer.append("svg")
     .attr("class", "neuron-svg")
     svgDefs = neuronSvg.append("svg:defs")
@@ -92,25 +125,25 @@ Network = () ->
     neuronSvg.on("mouseup", svgMouseUp)
     # Setup Bias
     neuronPanelBiasInput = neuronPanelBias.append("input")
-    .attr("type", "hidden")
-    .attr("id", "input_bias")
-    .attr("value", "1")
-    .on("input", () ->
-      selectedNode.bias = this.value
-      update()
-    )
+      .attr("type", "hidden")
+      .attr("id", "input_bias")
+      .attr("value", "1")
+      .on("input", () ->
+        selectedNode.bias = this.value
+        update()
+      )
     update()
 
   # Svg Mouse Handlers
   svgDoubleClick = () ->
     return if d3.event.defaultPrevented
     coords = d3.mouse(neuronSvg.node())
-    node = {id: currentID++, x:coords[0], y:coords[1], bias:0, inputWeights:[], inputs:[], outputs:[]};
+    node = new Node(coords[0], coords[1])
     myNodes.push(node)
     update()
 
   svgMouseDown = () ->
-
+    clearPanel()
 
   svgMouseUp = () ->
     if state.shiftDrag
@@ -135,7 +168,7 @@ Network = () ->
     return if !mouseDownNode
     if state.mouseDownNode != d
       # We have made a connection
-      edge = {start: mouseDownNode, finish: d}
+      edge = new Edge(mouseDownNode, d)
       # Remove any edges that are the opposite of the new one
       filteredEdges = myEdges.filter((elem) ->
         if elem.start == edge.finish && elem.finish == edge.start
@@ -143,6 +176,15 @@ Network = () ->
         return elem.start == edge.start && elem.finish == edge.finish
       )
       if filteredEdges .length == 0
+        # First make sure we aren't linking to an input or from an output
+        if nodeInputs.indexOf(edge.finish) != -1
+          alert("You can't link to an input node")
+          update()
+          return
+        else if nodeOutputs.indexOf(edge.start) != -1
+          alert("You can't link from an output node")
+          update()
+          return
         # Make sure that the graph doesn't contain cycles
         mouseDownNode.outputs.push(edge)
         d.inputs.push(edge)
@@ -158,32 +200,53 @@ Network = () ->
     else
       # We have just clicked on a node
       selectedNode = mouseDownNode
+      showPanel()
       # Load all data to the side panel
-      selectedNodeData.inputWeights = mouseDownNode.inputWeights
-      selectedNodeData.bias = mouseDownNode.bias
-      neuronPanelBiasInput.attr("type", "text")
-      neuronPanelBiasInput.attr("value", selectedNodeData.bias)
-      updatePanel()
 
     shiftDragLine.classed("hidden", true)
 
+  deleteNode = (node) ->
+    console.log("Deleting node ", node.id)
+    # Find the node in every list and delete it
+    index = myNodes.indexOf(node)
+    console.log("Index of Node is ", index)
+    if(index < 0)
+      return
+    # Remove all associated edges via filter
+    myEdges = myEdges.filter((edge) ->
+      if node.outputs.indexOf(edge) < 0 && node.inputs.indexOf(edge) < 0
+        return true
+    )
+    myNodes.splice(index, 1)
+    index = nodeInputs.indexOf(node)
+    if(index < 0)
+      nodeInputs.splice(index, 1)
+    index = nodeOutputs.indexOf(node)
+    if(index < 0)
+      nodeOutputs.splice(index, 1)
+    if selectedNode == node
+      selectedNode = null
+
   nodeRightClick = (d) ->
     d3.event.preventDefault()
-    # Find the offending node and remove it
-    index = 0
-    while index < myNodes.length
-      if  myNodes[index].id == d.id
-        # Remove all associated edges via filter
-        myEdges = myEdges.filter((edge) ->
-          node = myNodes[index]
-          if node.outputs.indexOf(edge) < 0 && node.inputs.indexOf(edge) < 0
-            return true
-        )
-        myNodes.splice(index, 1)
-        break
-      else
-        index += 1
+    deleteNode(d)
     update()
+
+  toggleInputNode = () ->
+    if(neuronPanelInputSwitch.property("checked"))
+      selectedNode.getAssociatedElement().classed("node-input", true)
+      nodeInputs.push(selectedNode)
+    else
+      selectedNode.getAssociatedElement().classed("node-input", false)
+      nodeInputs.slice(nodeInputs.indexOf(selectedNode), 1)
+      
+  toggleOutputNode = () ->
+    if(neuronPanelOutputSwitch.property("checked"))
+      selectedNode.getAssociatedElement().classed("node-output", true)
+      nodeOutputs.push(selectedNode)
+    else
+      selectedNode.getAssociatedElement().classed("node-output", false)
+      nodeInputs.slice(nodeOutputs.indexOf(selectedNode), 1)
 
   updateNodes = () ->
     nodeSelection = nodesG.selectAll("g").data(myNodes, (d) -> d.id)
@@ -207,7 +270,7 @@ Network = () ->
       .attr("r", "40")
       .attr("class", "node")
     nodeSelection
-      .attr("id", (d) -> d.id)
+      .attr("id", (d) -> "node_" + d.id)
     nodeSelection.exit().remove()
 
   updateEdges = () ->
@@ -232,7 +295,39 @@ Network = () ->
       .attr("fill", "#333")
     edgeSelection.select("textPath")
     .text((d) -> "W:" + d.finish.inputWeights[d.finish.inputs.indexOf(d)])
+    edgeSelection
+    .attr("id", (d) -> "edge_" + d.id)
     edgeSelection.exit().remove()
+
+  clearPanel = () ->
+    neuronPanelBiasInput.attr("type", "hidden")
+    selectedNodeData.inputWeights = []
+    selectedNodeData.bias = 0
+    neuronPanelInputRow.style("display", "none")
+    neuronPanelInputSwitch.property("checked", false)
+    neuronPanelOutputRow.style("display", "none")
+    neuronPanelOutputSwitch.property("checked", false)
+    updatePanel()
+
+  showPanel = () ->
+    selectedNodeData.inputWeights = selectedNode.inputWeights
+    selectedNodeData.bias = selectedNode.bias
+    neuronPanelBiasInput.attr("type", "text")
+    neuronPanelBiasInput.property("value", selectedNodeData.bias)
+    # Check to see if we should enable the checkboxes
+    if selectedNode.inputs.length == 0
+      neuronPanelInputRow.style("display", "table-row")
+      neuronPanelInputSwitch.property("checked", nodeInputs.indexOf(selectedNode) != -1)
+    else
+      neuronPanelInputRow.style("display", "none")
+      neuronPanelInputSwitch.property("checked", false)
+    if selectedNode.outputs.length == 0
+      neuronPanelOutputRow.style("display", "table-row")
+      neuronPanelOutputSwitch.property("checked", nodeOutputs.indexOf(selectedNode) != -1)
+    else
+      neuronPanelOutputRow.style("display", "none")
+      neuronPanelOutputSwitch.property("checked", false)
+    updatePanel()
 
   updatePanel = () ->
     # Setup Weights
@@ -242,7 +337,6 @@ Network = () ->
     .attr("value", (d) -> d)
     .attr("id", (d,i) -> "input_weight_" + i)
     .on("input", (d,i) ->
-      console.log(d)
       selectedNode.inputWeights[i] = this.value
       update()
     )
@@ -252,6 +346,7 @@ Network = () ->
   update = () ->
     updateNodes()
     updateEdges()
+    shiftDragLine.classed("hidden", true)
 
   isCyclic = () ->
     # Init visited and recursive stack arrays

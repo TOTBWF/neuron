@@ -5,10 +5,25 @@
         .neuron-panel
             h4.subtitle Configuration
             p.center Double click to create a new neuron
-            p.center Shift + click to link two neurons
+            p.center Shift + drag to link two neurons
             p.center Click and drag neurons to move them
-            h4.center Bias:
+            p.center Right click to delete nodes
+            h4.subtitle Bias:
             #neuron-panel-bias.center
-            h4.center Weights:
+            h4.subtitle Weights:
             #neuron-panel-weights.center
+            h4.subtitle Input/Output:
+            #neuron-panel-io.switch-container
+                .switch-row#input-switch-row
+                    .switch-description Input Node
+                    label.switch(for="input_toggle")
+                        input#input_toggle.switch-input(type="checkbox")
+                        span.switch-label(data-on="Yes", data-off="No")
+                        span.switch-handle
+                .switch-row#output-switch-row
+                    .switch-description Output Node
+                    label.switch(for="output_toggle")
+                        input#output_toggle.switch-input(type="checkbox")
+                        span.switch-label(data-on="Yes", data-off="No")
+                        span.switch-handle
         .neuron-container#neuron

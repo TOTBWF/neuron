@@ -123,16 +123,20 @@ Network = () ->
     nodeStart = indexNodesById(edge.start_id)
     nodeFinish = indexNodesById(edge.finish_id)
     # Set I/O nodes
-    if nodeStart.inputs.length == 0 && nodeInputs.indexOf(nodeStart) == -1
-      nodeInputs.push(nodeStart)
-    if nodeFinish.outputs.length == 0 && nodeOutputs.indexOf(nodeFinish) == -1
-      nodeOutputs.push(nodeFinish)
+    setInputNodeStatus(nodeStart)
+    setOutputNodeStatus(nodeFinish)
     # Unset I/O nodes if applicable
-    if deleteNodeIfExists(nodeInputs, nodeFinish)
-      console.log("node_" + nodeFinish.id + " is no longer an input node")
-    if deleteNodeIfExists(nodeOutputs, nodeStart)
-      console.log("node_" + nodeStart.id + " is no longer an output node")
-
+    deleteNodeIfExists(nodeInputs, nodeFinish)
+    deleteNodeIfExists(nodeOutputs, nodeStart)
+      
+  setInputNodeStatus = (node) ->
+    if node.inputs.length == 0 && nodeInputs.indexOf(node) == -1
+      nodeInputs.push(node)
+  
+  setOutputNodeStatus = (node) ->
+    if node.outputs.length == 0 && nodeOutputs.indexOf(node) == -1
+      nodeOutputs.push(node)
+    
   # Create a path for an SVG Line
   generatePath = (x0, y0, x1, y1) ->
     # The d attribute specifies a path for an SVG Line
@@ -140,9 +144,11 @@ Network = () ->
     # L actually draws the line
     "M " + x0 + " " + y0 + " L " + x1 + " " + y1
 
+  # Get a node from myNodes based off of ID
   indexNodesById = (id) ->
-    for i in [0..myNodes.length]
+    for i in [0..myNodes.length - 1]
       return myNodes[i] if myNodes[i].id == id
+    return -1
 
   # Returns true if deleted, false if node is not in list
   deleteNodeIfExists = (list, node) ->
@@ -219,15 +225,28 @@ Network = () ->
 
   deleteNode = (node) ->
     console.log("Deleting node ", node.id)
+    # Remove all associated edges via filter
+    myEdges = myEdges.filter((edge) ->
+      if node.outputs.indexOf(edge) != -1
+        # Check if the end of the edge is a valid input node after deletion
+        finishNode = indexNodesById(edge.finish_id);
+        finishNode.inputs.splice(finishNode.inputs.indexOf(edge))
+        setInputNodeStatus(finishNode)
+        return false
+      else if node.inputs.indexOf(edge) != -1
+        # Remove edge reference from the start of the edge and
+        # Check if the start of the edge is a valid output node after deletion
+        startNode = indexNodesById(edge.start_id);
+        startNode.outputs.splice(startNode.outputs.indexOf(edge))
+        setOutputNodeStatus(startNode)
+        return false
+      else
+        return true
+    )
     # Find the node in every list and delete it
     deleteNodeIfExists(myNodes, node)
     deleteNodeIfExists(nodeInputs, node)
     deleteNodeIfExists(nodeOutputs, node)
-    # Remove all associated edges via filter
-    myEdges = myEdges.filter((edge) ->
-      if node.outputs.indexOf(edge) < 0 && node.inputs.indexOf(edge) < 0
-        return true
-    )
     if selectedNode == node
       selectedNode = null
 

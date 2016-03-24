@@ -335,8 +335,13 @@ Network = () ->
 
   updatePanel = () ->
     # Setup Weights
-    weightSelection = neuronPanelWeights.selectAll("input").data(selectedNodeData.inputWeights)
-    weightSelection.enter().append("input")
+    weightSelection = neuronPanelWeights.selectAll("div").data(selectedNodeData.inputWeights)
+    weightContainer =weightSelection.enter().append("div")
+    .classed("weight-container", true)
+    weightContainer.append("label")
+    .attr("for", (d,i) -> "input_weight_" + i)
+    .text((d,i) -> i + ":")
+    weightContainer.append("input")
     .attr("type", "input")
     .attr("value", (d) -> d)
     .attr("id", (d,i) -> "input_weight_" + i)
@@ -367,7 +372,7 @@ Network = () ->
         visited[i] = true
         recStack[i] = true
         for edge in myNodes[i].outputs
-          j = myNodes.indexOf(edge.finish)
+          j = myNodes.indexOf(indexNodesById(edge.finish_id))
           if !visited[j] && helper(j)
             return true
           else if recStack[j]

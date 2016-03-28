@@ -168,7 +168,7 @@ window.Network = class Network
       outputNode.outputValue = resolveNode(outputNode)
 
 D3Closure = () ->
-  network = null;
+  network = null
   selectedNodeData = {}
   mouseDownNode= null
   shiftDrag= false
@@ -270,11 +270,10 @@ D3Closure = () ->
     # L actually draws the line
     "M " + x0 + " " + y0 + " L " + x1 + " " + y1
 
-
-
   # Svg Mouse Handlers
   svgDoubleClick = () ->
     return if d3.event.defaultPrevented
+    console.log("Double Click!")
     coords = d3.mouse(neuronSvg.node())
     node = new Node(coords[0], coords[1])
     network.nodes.push(node)
@@ -426,5 +425,5 @@ D3Closure = () ->
   return d3Closure
 
 $ ->
-  myD3Closure = D3Closure
+  myD3Closure = D3Closure()
   myD3Closure('#neuron')

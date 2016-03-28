@@ -282,6 +282,7 @@
       if (d3.event.defaultPrevented) {
         return;
       }
+      console.log("Double Click!");
       coords = d3.mouse(neuronSvg.node());
       node = new Node(coords[0], coords[1]);
       network.nodes.push(node);
@@ -433,7 +434,7 @@
 
   $(function() {
     var myD3Closure;
-    myD3Closure = D3Closure;
+    myD3Closure = D3Closure();
     return myD3Closure('#neuron');
   });
 

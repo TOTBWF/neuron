@@ -1,4 +1,4 @@
-class Node
+window.Node = class Node
   # Static ID counter
   @currentID:0
   constructor: (@x, @y)->
@@ -7,29 +7,171 @@ class Node
     @inputWeights=[]
     @inputs=[]
     @outputs=[]
-
+    @outputValue=0
   # Get the D3 selection associated with the node
   getAssociatedElement: () ->
     return d3.select("#node_" + @id)
 
-class Edge
+window.Edge =class Edge
   constructor: (@start_id, @finish_id) ->
 
-Network = () ->
-  # Store list of node and edge data
-  myNodes = []
-  myEdges = []
+window.Network = class Network
+  constructor: () ->
+    @nodes = []
+    @edges = []
+    @inputNodes = []
+    @outputNodes = []
+    @selectedNode = null
 
-  nodeInputs = []
-  nodeOutputs = []
+  # Get a node from myNodes based off of ID, null if not found
+  indexNodesById: (id) ->
+    for i in [0..@nodes.length - 1]
+      return @nodes[i] if @nodes[i].id == id
+    return null 
 
+  # Set or unset the nodes on an edge as an input or output node if applicable
+  setIONodeStatus: (edge) ->
+    nodeStart = @indexNodesById(edge.start_id)
+    nodeFinish = @indexNodesById(edge.finish_id)
+    # Set I/O nodes
+    @setInputNodeStatus(nodeStart)
+    @setOutputNodeStatus(nodeFinish)
+    # Unset I/O nodes if applicable
+    @deleteNodeFromList(@inputNodes, nodeFinish)
+    @deleteNodeFromList(@outputNodes, nodeStart)
+
+  # Set a node as an input node if applicable
+  setInputNodeStatus: (node) ->
+    if node.inputs.length == 0 && @inputNodes.indexOf(node) == -1
+      @inputNodes.push(node)
+
+  # Set a node as an output node if applicable
+  setOutputNodeStatus:  (node) ->
+    if node.outputs.length == 0 && @outputNodes.indexOf(node) == -1
+      @outputNodes.push(node)
+
+  # Returns true if deleted, false if node is not in list
+  deleteNodeFromList: (list, node) ->
+    index = list.indexOf(node)
+    if index != -1
+      list.splice(index, 1)
+      return true
+    else
+      return false
+
+  deleteNode:(node) ->
+    # Remove all associated edges via filter
+    @edges = @edges.filter((edge) =>
+      if node.outputs.indexOf(edge) != -1
+        # Check if the end of the edge is a valid input node after deletion
+        finishNode = @indexNodesById(edge.finish_id);
+        finishNode.inputs.splice(finishNode.inputs.indexOf(edge))
+        @setInputNodeStatus(finishNode)
+        return false
+      else if node.inputs.indexOf(edge) != -1
+        # Remove edge reference from the start of the edge and
+        # Check if the start of the edge is a valid output node after deletion
+        startNode = @indexNodesById(edge.start_id);
+        startNode.outputs.splice(startNode.outputs.indexOf(edge))
+        @setOutputNodeStatus(startNode)
+        return false
+      else
+        return true
+    )
+    # Find the node in every list and delete it
+    @deleteNodeFromList(@nodes, node)
+    @deleteNodeFromList(@inputNodes, node)
+    @deleteNodeFromList(@outputNodes, node)
+    if selectedNode == node
+      selectedNode = null
+
+  # Create an edge between 2 nodes, returns true if okay, error otherwise
+  createEdge: (start, finish) ->
+    edge = new Edge(start.id, finish.id)
+    # Remove any edges that are the opposite of the new one
+    filteredEdges = @edges.filter((elem) ->
+      if elem.start_id == edge.finish_id && elem.finish_id == edge.start_id
+        @edges.splice(@edges.indexOf(elem), 1)
+      return elem.start_id == edge.start_id && elem.finish_id == edge.finish_id
+    )
+    if filteredEdges .length == 0
+      # Make sure that the graph doesn't contain cycles
+      start.outputs.push(edge)
+      finish.inputs.push(edge)
+      finish.inputWeights.push(1)
+      @edges.push(edge)
+      if @isCyclic()
+        start.outputs.pop()
+        finish.inputs.pop()
+        finish.inputWeights.pop()
+        @edges.pop()
+        return "Graph cannot be cyclic!"
+      else
+        @setIONodeStatus(edge)
+        return true
+
+  isCyclic:() ->
+    # Init visited and recursive stack arrays
+    visited = []
+    recStack = []
+    for i in [0..@nodes.length - 1]
+      do (i) ->
+        visited[i] = false
+        recStack[i] = false
+
+    # Recursive helper function
+    helper= (i) =>
+      if visited[i] == false
+        visited[i] = true
+        recStack[i] = true
+        for edge in @nodes[i].outputs
+          j = @nodes.indexOf(@indexNodesById(edge.finish_id))
+          if !visited[j] && helper(j)
+            return true
+          else if recStack[j]
+            return true
+      recStack[i] = false
+      return false
+
+    for i in [0..@nodes.length - 1]
+      return true if helper(i)
+    return false
+
+
+  # Compute the result of the network
+  computeResult: () ->
+    # Compute the sigmoid of a node
+    computeSigmoid= (inputs, node) ->
+      # First check that the inputs are valid
+      if inputs.length != node.inputWeights.length
+        console.error("Input and Input Weight length mismatch on node_", node.id)
+        return
+      sigma = 0
+      for i in [0..inputs.length - 1]
+        sigma += inputs[i]*node.inputWeights[i]
+      return 1/(1 + Math.pow(Math.E ,sigma - node.bias))
+
+    # returns the output of a given node
+    resolveNode = (node) ->
+      # Check to see if the node is an input node
+      if node.inputs.length == 0
+        return node.bias
+      # Resolve all of the inputs
+      inputs = []
+      for edge in node.inputs
+        do(edge) ->
+          inputs.push(resolveNode(indexNodesById(edge.start_id)))
+      return computeSigmoid(inputs, node)
+
+    # Start at the end and work our way backwards
+    for outputNode in @outputNodes
+      outputNode.outputValue = resolveNode(outputNode)
+
+D3Closure = () ->
+  network = null
   selectedNodeData = {}
-
-  state = {
-    mouseDownNode: null,
-    shiftDrag: false,
-  }
-  selectedNode = null
+  mouseDownNode= null
+  shiftDrag= false
 
 
   # Hold SVG Groups for edges and nodes
@@ -54,7 +196,7 @@ Network = () ->
     .origin (d) ->
       return d
     .on "drag", (d) ->
-      if state.shiftDrag
+      if shiftDrag
         shiftDragLine.attr("d", generatePath(d.x, d.y, d3.mouse(neuronSvg.node())[0], d3.mouse(neuronSvg.node())[1]))
       else
         d.x = d3.event.x
@@ -64,11 +206,12 @@ Network = () ->
         d3.select(this).select("text").attr("x", d.x).attr("y", d.y)
         update()
 
-  network = (container, nodes, edges) ->
+  d3Closure = (container) ->
+    network = new Network()
     neuronContainer = d3.select(container)
     neuronPanelBias = d3.select("#neuron-panel-bias")
     neuronPanelWeights = d3.select("#neuron-panel-weights")
-    d3.select("#compute-button").on("click", computeResult)
+    d3.select("#compute-button").on("click", network.computeResult)
     neuronSvg = neuronContainer.append("svg")
     .attr("class", "neuron-svg")
     svgDefs = neuronSvg.append("svg:defs")
@@ -118,25 +261,8 @@ Network = () ->
     update()
 
 
-  # Utility Functions
-  setIONodeStatus = (edge) ->
-    nodeStart = indexNodesById(edge.start_id)
-    nodeFinish = indexNodesById(edge.finish_id)
-    # Set I/O nodes
-    setInputNodeStatus(nodeStart)
-    setOutputNodeStatus(nodeFinish)
-    # Unset I/O nodes if applicable
-    deleteNodeIfExists(nodeInputs, nodeFinish)
-    deleteNodeIfExists(nodeOutputs, nodeStart)
-      
-  setInputNodeStatus = (node) ->
-    if node.inputs.length == 0 && nodeInputs.indexOf(node) == -1
-      nodeInputs.push(node)
-  
-  setOutputNodeStatus = (node) ->
-    if node.outputs.length == 0 && nodeOutputs.indexOf(node) == -1
-      nodeOutputs.push(node)
-    
+
+
   # Create a path for an SVG Line
   generatePath = (x0, y0, x1, y1) ->
     # The d attribute specifies a path for an SVG Line
@@ -144,36 +270,22 @@ Network = () ->
     # L actually draws the line
     "M " + x0 + " " + y0 + " L " + x1 + " " + y1
 
-  # Get a node from myNodes based off of ID
-  indexNodesById = (id) ->
-    for i in [0..myNodes.length - 1]
-      return myNodes[i] if myNodes[i].id == id
-    return -1
-
-  # Returns true if deleted, false if node is not in list
-  deleteNodeIfExists = (list, node) ->
-    index = list.indexOf(node)
-    if index != -1
-      list.splice(index, 1)
-      return true
-    else
-      return false
-
   # Svg Mouse Handlers
   svgDoubleClick = () ->
     return if d3.event.defaultPrevented
+    console.log("Double Click!")
     coords = d3.mouse(neuronSvg.node())
     node = new Node(coords[0], coords[1])
-    myNodes.push(node)
+    network.nodes.push(node)
     update()
 
   svgMouseDown = () ->
     clearPanel()
 
   svgMouseUp = () ->
-    if state.shiftDrag
+    if shiftDrag
       shiftDragLine.classed("hidden", true)
-      state.shiftDrag = false
+      shiftDrag = false
 
   # Node Mouse Handlers
   nodeMouseDown = (d) ->
@@ -181,74 +293,27 @@ Network = () ->
     # We stop the propagation of the even
     d3.event.stopPropagation()
     # Store the current node so we know if there is a link or not
-    state.mouseDownNode = d
+    mouseDownNode = d
     if d3.event.shiftKey
-      state.shiftDrag = true
+      shiftDrag = true
       shiftDragLine.classed('hidden', false)
         .attr("d", generatePath(d.x, d.y, d.x, d.y))
 
   nodeMouseUp = (d) ->
-    state.shiftDrag = false
-    mouseDownNode = state.mouseDownNode
+    shiftDrag = false
     return if !mouseDownNode
-    if state.mouseDownNode != d
-      # We have made a connection
-      edge = new Edge(mouseDownNode.id, d.id)
-      # Remove any edges that are the opposite of the new one
-      filteredEdges = myEdges.filter((elem) ->
-        if elem.start_id == edge.finish_id && elem.finish_id == edge.start_id
-          myEdges.splice(myEdges.indexOf(elem), 1)
-        return elem.start_id == edge.start_id && elem.finish_id == edge.finish_id
-      )
-      if filteredEdges .length == 0
-        # Make sure that the graph doesn't contain cycles
-        mouseDownNode.outputs.push(edge)
-        d.inputs.push(edge)
-        d.inputWeights.push(1)
-        myEdges.push(edge)
-        if isCyclic()
-          mouseDownNode.outputs.pop()
-          d.inputs.pop()
-          d.inputWeights.pop()
-          myEdges.pop()
-          alert("Neural Networks Can't Be Cyclic!")
-        else
-          setIONodeStatus(edge)
+    if mouseDownNode != d
+        result = network.createEdge(mouseDownNode, d)
+        if !result
+          alert(result)
         update()
     else
       # We have just clicked on a node
-      selectedNode = mouseDownNode
+      network.selectedNode = mouseDownNode
       showPanel()
       # Load all data to the side panel
-
     shiftDragLine.classed("hidden", true)
 
-  deleteNode = (node) ->
-    console.log("Deleting node ", node.id)
-    # Remove all associated edges via filter
-    myEdges = myEdges.filter((edge) ->
-      if node.outputs.indexOf(edge) != -1
-        # Check if the end of the edge is a valid input node after deletion
-        finishNode = indexNodesById(edge.finish_id);
-        finishNode.inputs.splice(finishNode.inputs.indexOf(edge))
-        setInputNodeStatus(finishNode)
-        return false
-      else if node.inputs.indexOf(edge) != -1
-        # Remove edge reference from the start of the edge and
-        # Check if the start of the edge is a valid output node after deletion
-        startNode = indexNodesById(edge.start_id);
-        startNode.outputs.splice(startNode.outputs.indexOf(edge))
-        setOutputNodeStatus(startNode)
-        return false
-      else
-        return true
-    )
-    # Find the node in every list and delete it
-    deleteNodeIfExists(myNodes, node)
-    deleteNodeIfExists(nodeInputs, node)
-    deleteNodeIfExists(nodeOutputs, node)
-    if selectedNode == node
-      selectedNode = null
 
   nodeRightClick = (d) ->
     d3.event.preventDefault()
@@ -256,7 +321,7 @@ Network = () ->
     update()
 
   updateNodes = () ->
-    nodeSelection = nodesG.selectAll("g").data(myNodes, (d) -> d.id)
+    nodeSelection = nodesG.selectAll("g").data(network.nodes, (d) -> d.id)
     enterNodeSelection = nodeSelection.enter().append("g")
       .on("contextmenu", nodeRightClick)
       .on("mousedown", nodeMouseDown)
@@ -280,12 +345,12 @@ Network = () ->
       .attr("class", "node")
     nodeSelection
       .attr("id", (d) -> "node_" + d.id)
-      .classed("node-input", (d) -> nodeInputs.indexOf(d) != -1)
-      .classed("node-output", (d) ->  nodeOutputs.indexOf(d) != -1)
+      .classed("node-input", (d) -> network.inputNodes.indexOf(d) != -1)
+      .classed("node-output", (d) ->  network.outputNodes.indexOf(d) != -1)
     nodeSelection.exit().remove()
 
   updateEdges = () ->
-    edgeSelection = edgesG.selectAll("g").data(myEdges, (d) -> d.start_id + "+" + d.finish_id)
+    edgeSelection = edgesG.selectAll("g").data(network.edges, (d) -> d.start_id + "+" + d.finish_id)
     enterEdgeSelection = edgeSelection.enter().append("g")
     enterEdgeSelection.append("path")
       .style("marker-end", "url(#edge-arrow)")
@@ -295,16 +360,16 @@ Network = () ->
     edgeSelection.select("path")
       .attr("id", (d,i) -> "linkId_" + i)
       .attr("d", (edge) ->
-        startNode = indexNodesById(edge.start_id)
-        finishNode = indexNodesById(edge.finish_id)
+        startNode = network.indexNodesById(edge.start_id)
+        finishNode = network.indexNodesById(edge.finish_id)
         generatePath(startNode.x, startNode.y, finishNode.x, finishNode.y)
       )
     edgeSelection.select("text")
       .attr("text-anchor", "end")
       .attr("dx", (edge) ->
         # Get the length of the path
-        startNode = indexNodesById(edge.start_id)
-        finishNode = indexNodesById(edge.finish_id)
+        startNode = network.indexNodesById(edge.start_id)
+        finishNode = network.indexNodesById(edge.finish_id)
         distance = Math.sqrt(Math.pow(startNode.x - finishNode.x, 2) + Math.pow(startNode.y - finishNode.y, 2))
         return distance - 100
       )
@@ -312,7 +377,7 @@ Network = () ->
       .attr("fill", "#333")
     edgeSelection.select("textPath")
     .text((edge) ->
-      finishNode = indexNodesById(edge.finish_id)
+      finishNode = network.indexNodesById(edge.finish_id)
       "" + finishNode.inputs.indexOf(edge)
     )
     edgeSelection
@@ -335,8 +400,13 @@ Network = () ->
 
   updatePanel = () ->
     # Setup Weights
-    weightSelection = neuronPanelWeights.selectAll("input").data(selectedNodeData.inputWeights)
-    weightSelection.enter().append("input")
+    weightSelection = neuronPanelWeights.selectAll("div").data(selectedNodeData.inputWeights)
+    weightContainer =weightSelection.enter().append("div")
+    .classed("weight-container", true)
+    weightContainer.append("label")
+    .attr("for", (d,i) -> "input_weight_" + i)
+    .text((d,i) -> i + ":")
+    weightContainer.append("input")
     .attr("type", "input")
     .attr("value", (d) -> d)
     .attr("id", (d,i) -> "input_weight_" + i)
@@ -351,67 +421,9 @@ Network = () ->
     updateNodes()
     updateEdges()
     shiftDragLine.classed("hidden", true)
-
-  isCyclic = () ->
-    # Init visited and recursive stack arrays
-    visited = []
-    recStack = []
-    for i in [0..myNodes.length - 1]
-      do (i) ->
-        visited[i] = false
-        recStack[i] = false
-
-    # Recursive helper function
-    helper = (i) ->
-      if visited[i] == false
-        visited[i] = true
-        recStack[i] = true
-        for edge in myNodes[i].outputs
-          j = myNodes.indexOf(edge.finish)
-          if !visited[j] && helper(j)
-            return true
-          else if recStack[j]
-            return true
-      recStack[i] = false
-      return false
-
-    for i in [0..myNodes.length - 1]
-      return true if helper(i)
-    return false
     
-  computeSigmoid = (inputs, node) ->
-    # First check that the inputs are valid
-    if inputs.length != node.inputWeights.length
-      console.error("Input and Input Weight length mismatch on node_", node.id)
-      return
-    sigma = 0
-    for i in [0..inputs.length - 1]
-      sigma += inputs[i]*node.inputWeights[i]
-    return 1/(1 + Math.pow(Math.E ,sigma - node.bias))
-
-  # Compute the result of the network
-  computeResult = () ->
-    # returns the output of a given node
-    resolveNode = (node) ->
-      # Check to see if the node is an input node
-      if node.inputs.length == 0
-        return node.bias
-      # Resolve all of the inputs
-      inputs = []
-      for edge in node.inputs
-        do(edge) ->
-          inputs.push(resolveNode(indexNodesById(edge.start_id)))
-      return computeSigmoid(inputs, node)
-
-    # Start at the end and work our way backwards
-    outputString = ""
-    for outputNode in nodeOutputs
-      outputString += "node_" + outputNode.id + " = " + resolveNode(outputNode) + "\n"
-    alert(outputString)
-    update()
-
-  return network
+  return d3Closure
 
 $ ->
-  myNetwork = Network()
-  myNetwork("#neuron", [], [])
+  myD3Closure = D3Closure()
+  myD3Closure('#neuron')
